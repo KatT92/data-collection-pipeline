@@ -1,0 +1,9 @@
+#
+.env
+.prettierignore
+#folders
+raw_data/
+#files
+bg_links.py
+#
+__pycache__/
