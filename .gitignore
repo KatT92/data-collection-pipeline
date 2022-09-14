@@ -5,6 +5,7 @@
 raw_data/
 #files
 bg_links.py
+bg_links_2.py
 #
 __pycache__/
 #
