@@ -5,19 +5,18 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from webdriver_manager.chrome import ChromeDriverManager
 import time
-import os
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
-from decouple import config
+import config
 
 
-class Scraper:
+class LinkScraper:
 
-    def __init__(self, url):
+    def __init__(self, bgg_url):
         options = Options()
         self.driver = webdriver.Chrome(service=Service(
             ChromeDriverManager().install()), options=options)
-        self.URL = url
+        self.URL = bgg_url
         self.driver.get(self.URL)
         self.links = []
 
@@ -48,24 +47,23 @@ class Scraper:
 
     def createLinksFile(self):
         print(self.links)
-        file = open("bg_links.py", "w")
+        file = open("bg_links_2.py", "w")
         file.write(f'links = {self.links}')
         file.close()
 
 
 def getInfo(urllist):
-    info = Scraper(urllist)
+    info = LinkScraper(urllist)
     time.sleep(2)
     info.bypassCookies()
     time.sleep(2)
-    for i in range(1, 10):
+    for i in range(1, 10):  # make sure you get ranks for pages we need them from
         info.getLinks(i)
     info.createLinksFile()
 
 
 if __name__ == "__main__":
-    url = config('URL')
-    print(url)
-    getInfo(url)
+    bgg_url = config.url + '2'  # page 1 -> 1-100, page 2 -> 101-200 etc
+    getInfo(bgg_url)
     time.sleep(2)
     print('exit')

@@ -1,8 +1,9 @@
+import connect
 import os
 import urllib.request
 import uuid  # uuid4
 from time import sleep
-from bg_links import links
+from bg_links_2 import links
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
@@ -12,6 +13,9 @@ from webdriver_manager.chrome import ChromeDriverManager
 # from pyclbr import Function
 # from turtle import ScrolledCanvas, position
 # from urllib.error import URLError
+import boto3
+# Let's start by telling to boto3 that we want to use an S3 bucket
+import connect
 
 
 class PageScraper:
@@ -24,16 +28,18 @@ class PageScraper:
         self.images = []
         self.cwd = os.getcwd()
         self.urllist = urllist
-
-    # def goToPage(self, j):
-    #     self.URL = self.urllist[j]
-    #     self.target_dir = self.cwd + '/raw_data' + '/' + self.URL.split("/")[4]
+        self.URL = self.urllist[0]  # initial value
+        self.driver.get(self.urllist[0])
+        self.target_dir = self.cwd + \
+            '/raw_data/' + urllist[0].split("/")[4]
+        self.upload = True
 
     def goToPage(self, j):
-        self.URL = self.urllist[j]
-        self.target_dir = self.cwd + \
-            '/raw_data/' + urllist[j].split("/")[4]
-        self.driver.get(self.urllist[j])
+        if j != 0:
+            self.URL = self.urllist[j]  # new page
+            self.target_dir = self.cwd + \
+                '/raw_data/' + urllist[j].split("/")[4]  # new folder
+            self.driver.get(self.urllist[j])  # goes to site
 
     def bypassCookies(self):
         try:
@@ -53,6 +59,7 @@ class PageScraper:
         pass
 
     def getPageData(self):
+        # check if data has already been added
         self.data = ""
         self.images = []
 
@@ -78,8 +85,9 @@ class PageScraper:
 
         #
         try:
-            max_players = self.driver.find_element(
-                by=By.XPATH, value=f'//div[1][@class="gameplay-item-primary"]/span/span[2]').text[1:]
+            max_players = int(self.driver.find_element(
+                by=By.XPATH, value=f'//div[1][@class="gameplay-item-primary"]/span/span[2]').text[1:])
+
         except:
             max_players = min_players
         #
@@ -90,17 +98,19 @@ class PageScraper:
                 by=By.XPATH, value=f'//div[1][@class="gameplay-item-primary"]/span/span/span[2]').text[1:]
         except:
             max_time = min_time
-        designer = self.driver.find_element(
-            by=By.XPATH, value=f'//div[@class="credits ng-scope"]/ul/li[1]/popup-list/span/a').text
+        try:
+            designer = self.driver.find_element(
+                by=By.XPATH, value=f'//div[@class="credits ng-scope"]/ul/li[1]/popup-list/span/a').text
+        except:
+            designer = self.driver.find_element(
+                by=By.XPATH, value=f'//div[@class="credits ng-scope"]/ul/li[2]/popup-list/span/a').text
         if len(game_rank) == 2:
-            ranks = {"overall": game_rank[0].text,
-                     "strategy": game_rank[1].text}
+            rank_numbers = f"{game_rank[0].text}, {game_rank[1].text}"
         if len(game_rank) == 3:
-            ranks = {
-                "overall": game_rank[0].text, "thematic": game_rank[1].text, "strategy": game_rank[2].text}
+            rank_numbers = f"{game_rank[0].text}, {game_rank[1].text}, {game_rank[2].text}"
 
-        self.data = {"uuid": str(uuid.uuid4()), "id": self.URL.split('/')[4], "url": self.URL, "name": game_name, "img": self.images[0],
-                     "ranks": ranks,
+        self.data = {"uuid": str(uuid.uuid4()), "id": self.URL.split('/')[4], "url": self.URL, "game_name": game_name, "img": self.images[0],
+                     "rank_names": "overall, thematic, strategy", "rank_numbers": rank_numbers,
                      "min_players": min_players, "max_players": max_players, "min_time": min_time,
                      "max_time": max_time,
                      "designer": designer}
@@ -119,10 +129,30 @@ class PageScraper:
         if os.path.exists('./images') == False:
             os.mkdir('./images')
             os.chdir('./images')
-
+            s3_client = boto3.client('s3')
+            sleep(1)
             for i in range(0, len(self.images)):
                 urllib.request.urlretrieve(
                     self.images[i], f'{self.URL.split("/")[4]}_{i}.jpg')
+                response = s3_client.upload_file(
+                    f'{self.URL.split("/")[4]}_{i}.jpg', 'bggdata', f'{self.URL.split("/")[4]}_{i}.jpg')
+
+    def uploadData(self):
+        # add try/effect or if statements to check types
+        uuid = self.data['uuid']
+        id = self.data['id']
+        url = self.data['url']
+        game_name = self.data['game_name']
+        img = self.data['img']
+        rank_names = self.data['rank_names']
+        rank_numbers = self.data['rank_numbers']
+        min_players = self.data['min_players']
+        max_players = self.data['max_players']
+        min_time = self.data['min_time']
+        max_time = self.data['max_time']
+        designer = self.data['designer']
+        insert_cmd = f'''INSERT INTO games VALUES ('{uuid}', {id}, '{url}', '{game_name}', '{img}', '{rank_names}', '{rank_numbers}', {min_players}, {max_players}, {min_time}, {max_time}, '{designer}');'''
+        connect.engine.execute(insert_cmd)
 
 
 def getInfo(urllist):
@@ -131,12 +161,15 @@ def getInfo(urllist):
         info.goToPage(j)
         sleep(2)
         info.bypassCookies()
-        sleep(2)
         info.getPageData()
-        sleep(2)
-        info.writeData()
-        sleep(2)
-        info.saveImages()
+        if info.upload == False:
+            info.writeData()
+        elif info.upload == True:
+            info.saveImages()
+            sleep(2)
+            info.uploadData()
+        else:
+            print('error')
         sleep(2)
 
 

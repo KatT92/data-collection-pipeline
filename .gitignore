@@ -7,3 +7,5 @@ raw_data/
 bg_links.py
 #
 __pycache__/
+#
+database.ini
