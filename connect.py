@@ -1,11 +1,12 @@
 from sqlalchemy import create_engine
+import config
 
 DATABASE_TYPE = 'postgresql'
 DBAPI = 'psycopg2'
 # Change it for your AWS endpoint
-ENDPOINT = 'bgg-data-1.cbx9lvymwfei.eu-west-2.rds.amazonaws.com'
+ENDPOINT = config.endpoint
 USER = 'postgres'
-PASSWORD = 'MjvJr2sU7SWDShj'
+PASSWORD = config.password
 PORT = 5432
 DATABASE = 'postgres'
 engine = create_engine(

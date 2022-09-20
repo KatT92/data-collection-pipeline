@@ -3,7 +3,7 @@ import os
 import urllib.request
 import uuid  # uuid4
 from time import sleep
-from bg_links_2 import links
+from bg_links import links
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
@@ -16,6 +16,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 import boto3
 # Let's start by telling to boto3 that we want to use an S3 bucket
 import connect
+import json
 
 
 class PageScraper:
@@ -24,22 +25,51 @@ class PageScraper:
         options = Options()
         self.driver = webdriver.Chrome(service=Service(
             ChromeDriverManager().install()), options=options)
-        self.data = ""
+        self.data = {}
         self.images = []
         self.cwd = os.getcwd()
         self.urllist = urllist
         self.URL = self.urllist[0]  # initial value
-        self.driver.get(self.urllist[0])
+        self.saveToMemory = ''
+        self.uploadToAWS = ''
+        # initialise values to see if data is repeated, [memory, AWS]
+        self.uploadRepeat = False
+        self.awsRepeat = False
+        self.URL = self.urllist[0]  # new page
         self.target_dir = self.cwd + \
-            '/raw_data/' + urllist[0].split("/")[4]
-        self.upload = True
+            '/raw_data/' + urllist[0].split("/")[4]  # new folder
+
+    def checkSaveLocation(self):
+        print('save to memory, y/n')
+        self.saveToMemory = input()
+        while self.saveToMemory not in ['y', 'Y', 'n', 'N']:
+            print('save to memory, type y or n')
+            self.saveToMemory = input()
+
+        print('upload to AWS, y/n')
+        self.uploadToAWS = input()
+        while self.uploadToAWS not in ['y', 'Y', 'n', 'N']:
+            print('upload To AWS, type y or n')
+            self.uploadToAWS = input()
+
+    def check_repeat_data(self, j):
+        if self.saveToMemory == 'y':
+            # upload url from json
+            self.uploadRepeat = False
+        else:
+            pass
+
+        if self.uploadToAWS == 'y':
+            # use SQL to check if url is in urllist
+            self.awsRepeat = False
+        else:
+            pass
 
     def goToPage(self, j):
-        if j != 0:
-            self.URL = self.urllist[j]  # new page
-            self.target_dir = self.cwd + \
-                '/raw_data/' + urllist[j].split("/")[4]  # new folder
-            self.driver.get(self.urllist[j])  # goes to site
+        self.URL = self.urllist[j]  # new page
+        self.target_dir = self.cwd + \
+            '/raw_data/' + urllist[j].split("/")[4]  # new folder
+        self.driver.get(self.urllist[j])  # goes to site
 
     def bypassCookies(self):
         try:
@@ -60,18 +90,23 @@ class PageScraper:
 
     def getPageData(self):
         # check if data has already been added
-        self.data = ""
+        self.data = {}
         self.images = []
-
-        game_img = self.driver.find_element(
-            By.CLASS_NAME, 'img-responsive').get_attribute("src")
-        self.images.append(game_img)
+        try:
+            game_img = self.driver.find_element(
+                By.CLASS_NAME, 'img-responsive').get_attribute("src")
+            self.images.append(game_img)
+        except:
+            pass
 
         for i in range(1, 5):
-            game_images = self.driver.find_element(
-                by=By.XPATH, value=f'//div[@class="summary-media-grid-row"]/div[{i}]/a/img').get_attribute('src')
-            self.images.append(game_images)
-            sleep(2)
+            try:
+                game_images = self.driver.find_element(
+                    by=By.XPATH, value=f'//div[@class="summary-media-grid-row"]/div[{i}]/a/img').get_attribute('src')
+                self.images.append(game_images)
+                sleep(2)
+            except:
+                pass
 
         game_rank = self.driver.find_element(
             by=By.CLASS_NAME, value='game-header-ranks').find_elements(by=By.TAG_NAME, value='a')
@@ -115,15 +150,17 @@ class PageScraper:
                      "max_time": max_time,
                      "designer": designer}
 
-    def writeData(self):
+    def createDirectory(self):
         if os.path.exists(self.target_dir) == False:
             os.mkdir(self.target_dir)
             sleep(2)
-            os.chdir(self.target_dir)
-            # replace x with w for if it doesn't exist
-            file = open("data.json", "w")
-            file.write(f'"{self.data}"')
-            file.close()
+        os.chdir(self.target_dir)
+
+    def writeData(self):
+        # replace x with w for if it doesn't exist
+        file = open("data.json", "w")
+        file.write(f'{json.dumps(self.data)}')
+        file.close()
 
     def saveImages(self):
         if os.path.exists('./images') == False:
@@ -157,20 +194,24 @@ class PageScraper:
 
 def getInfo(urllist):
     info = PageScraper(urllist)
+    info.checkSaveLocation()
+
     for j in range(0, len(urllist)):
-        info.goToPage(j)
-        sleep(2)
-        info.bypassCookies()
-        info.getPageData()
-        if info.upload == False:
-            info.writeData()
-        elif info.upload == True:
-            info.saveImages()
+        info.check_repeat_data(j)  # check if data has been collected
+        if (info.uploadRepeat == False and info.saveToMemory == 'y') or (info.awsRepeat == False and info.uploadToAWS == 'y'):  # set to only go to page if up
+            info.goToPage(j)
             sleep(2)
-            info.uploadData()
-        else:
-            print('error')
-        sleep(2)
+            info.bypassCookies()
+            info.getPageData()
+            info.createDirectory()
+            if info.saveToMemory == 'y':
+                info.writeData()
+            if info.uploadToAWS == 'y':
+                info.saveImages()
+                sleep(2)
+                info.uploadData()
+
+            sleep(2)
 
 
 if __name__ == "__main__":
