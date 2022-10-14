@@ -1,0 +1,25 @@
+services:
+  selenium:
+    image: selenium/standalone-chrome
+    ports:
+      - 4444:4444
+    restart: always
+  prometheus:
+    image: prom/prometheus:latest
+    volumes: 
+      - $PWD/config:/etc/prometheus
+    ports:
+      - 9090:9090
+    grafana:  
+      image: grafana/grafana-enterprise
+      ports:
+        - 3000:3000
+
+  app:
+    build:
+      context: .
+    volumes: 
+      - ./bg_links:/bg_links
+    command: sh -c "./scrapers/linkScraper.py"
+    depends_on:
+      - selenium
